@@ -2,6 +2,8 @@ if (process.env.NODE_ENV !== 'production') {
     require("dotenv").config();
 }
 
+const cache = require('node-cache');
+const client = new cache();
 const axios = require('axios');
 const axiosRateLimit = require('axios-rate-limit');
 
@@ -12,12 +14,31 @@ const axiosInstance = axiosRateLimit(axios.create(), {
 });
 
 const YEAR = 2024;
+
 const getCountryFips = async (zipcode) => {
+    const cacheKey = "zip_" + zipcode;
+    try {
+        const cachedData = client.get(cacheKey);
+        if (cachedData) {
+            return JSON.parse(cachedData);
+        }
+    } catch (e) {
+        console.log(e);
+    }
+
     let url = process.env.API_MAIN_URL + `counties/by/zip/${zipcode}?apikey=${process.env.API_KEY}`;
+
     try {
         let req = await axiosInstance.get(url);
         let {counties = []} = req.data;
-        return counties[0];
+        let res = counties[0];
+        try {
+            client.set(cacheKey, JSON.stringify(res), 600);
+        } catch (e) {
+            console.log(e);
+        }
+
+        return res;
     } catch (error) {
         console.log(error);
         return {error: error.message};

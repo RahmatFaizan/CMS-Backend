@@ -1,7 +1,11 @@
 const express = require('express');
 const {getCountryFips, getEstimate, searchPlans} = require("./healthcarFn");
 const router = express.Router();
-const {body, validationResult} = require('express-validator');  const validate = validations => {
+const cache = require('node-cache');
+const client = new cache();
+
+const {body, validationResult} = require('express-validator');
+const validate = validations => {
     return async (req, res, next) => {
         for (let validation of validations) {
             const result = await validation.run(req);
@@ -26,11 +30,28 @@ router.post('/api/v1/healthcare/plans', validate([
     body("age").notEmpty().withMessage('age is required').isNumeric().withMessage('age must be a numeric value'),
     body("gender").notEmpty().isString().withMessage('gender is required')
 ]), async (req, res) => {
-
     try {
-
+        let cacheError = false;
         let {zipcode, uses_tobacco, income, age, gender} = req.body;
         let contact = {zipcode, uses_tobacco, income, age, gender};
+
+        const cacheKey = `processData_${JSON.stringify(contact)}`;
+
+        try {
+
+            const cachedData = client.get(cacheKey);
+
+            if (cachedData) {
+                console.log('Serving data from cache:', cacheKey);
+                const data = JSON.parse(cachedData);
+                data.cached = true;
+                return res.json(data);
+            }
+
+        } catch (e) {
+            cacheError = true;
+            console.log(e.message);
+        }
 
         let fips = await getCountryFips(zipcode);
         fips.countyfips = fips.fips;
@@ -56,6 +77,13 @@ router.post('/api/v1/healthcare/plans', validate([
         }
 
         plans.estimates = estimates;
+        try {
+            client.set(cacheKey, JSON.stringify(plans), 600);
+        } catch (e) {
+            console.log(e);
+            cacheError = true;
+        }
+        plans.cacheError = cacheError;
         res.status(200).json(plans)
     } catch (err) {
         console.log(err);
