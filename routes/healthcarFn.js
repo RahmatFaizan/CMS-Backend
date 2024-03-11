@@ -40,8 +40,8 @@ const getCountryFips = async (zipcode) => {
 
         return res;
     } catch (error) {
-        console.log(error);
-        return {error: error.message};
+        console.log("Fun: getCountryFips ", error.message);
+        return {error: "Something went wrong."};
     }
 }
 
@@ -78,8 +78,8 @@ const getEstimate = async (contact, fips) => {
         let {estimates} = req.data;
         return estimates || {};
     } catch (error) {
-        console.log(error);
-        return {error: error.message}
+        console.log("Fun: getEstimate ", error.message);
+        return {error: "Something went wrong."};
     }
 }
 
@@ -104,11 +104,38 @@ const searchPlans = async (contact, fips, aptc_override, issuers) => {
 
     let url = process.env.API_MAIN_URL + `plans/search?apikey=${process.env.API_KEY}`;
     try {
-        let req = await axiosInstance.post(url, householdJSON)
+        let req = await axiosInstance.post(url, householdJSON);
         return (req.data);
     } catch (er) {
-        return {error: er.message};
+        console.log("Fun: searchPlans ", er.message);
+        return {error: "Something went wrong."}
     }
 }
 
-module.exports = {getCountryFips, getEstimate, searchPlans};
+const listIssuers = async (state, page) => {
+    const cacheKey = state.toLowerCase().trim() + page;
+    try {
+        const cachedData = client.get(cacheKey);
+        if (cachedData) {
+            return JSON.parse(cachedData);
+        }
+    } catch (e) {
+        console.log(e);
+    }
+
+    try {
+        const url = new URL(`issuers?offset=${page}&limit=25&state=${state.toUpperCase()}&year=${YEAR}&apikey=${process.env.API_KEY}`, process.env.API_MAIN_URL);
+        const req = await axiosInstance.get(url.toString());
+        try {
+            client.set(cacheKey, JSON.stringify(res), 600);
+        } catch (e) {
+            console.log(e);
+        }
+        return (req.data);
+    } catch (err) {
+        console.log("Fun: listIssuers ", err.message);
+        return {error: "Something went wrong."}
+    }
+}
+
+module.exports = {getCountryFips, getEstimate, searchPlans, listIssuers};
